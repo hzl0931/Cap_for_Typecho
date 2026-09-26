@@ -42,6 +42,32 @@ Cap 是一个现代、轻量级的开源 SHA-256 工作量证明 CAPTCHA 替代�
 - **启用位置**: 选择在登录页面和/或评论页面启用验证
 - **主题**: 选择亮色或暗色主题
 - **使用 cURL**: 推荐启用，需要 PHP cURL 扩展
+- **Cloudflare Access Client ID / Client Secret**: 可选，使用 Cloudflare Access Service Token 保护 Cap 接口时填写，详见下文
+
+## 使用 Cloudflare Access Service Token 保护 Cap 服务
+
+如果 Cap 服务部署在 Cloudflare 上，并希望用 Cloudflare Access 限制访问来源，可以在插件中填写 Service Token。
+插件在服务端校验时会自动为请求附加 Cloudflare 要求的认证请求头：
+
+```
+CF-Access-Client-Id: <CLIENT_ID>
+CF-Access-Client-Secret: <CLIENT_SECRET>
+```
+
+配置步骤：
+
+1. 在 Cloudflare Zero Trust 控制台的 **Access → Service Auth → Service Tokens** 创建 Service Token，记下 Client ID 与 Client Secret
+2. 在 Access 应用的策略（Policy）中新增一条 **Service Auth** 规则，仅允许该 Service Token 通过
+3. 在插件设置中填入 Client ID 和 Client Secret，保存后即可生效
+
+注意事项：
+
+- Access 应用应**只覆盖服务端校验路径** `{apiEndpoint}/validate`。浏览器中的验证组件会直接请求 `{apiEndpoint}/challenge`
+  和 `{apiEndpoint}/redeem`，这两个路径若被 Access 拦截，验证组件将无法加载。请将 Access 应用的路径限定为 `validate`，
+  或使用 Bypass 策略放行这两个路径。
+- Service Token 属于机密信息，只会保存在服务端数据库中。请勿将其写入主题模板或其他前端可见的位置。
+- 两个字段留空时插件不会发送上述请求头，行为与未启用该功能时完全一致。
+- 若 Service Token 配置错误，日志中会出现 `Request was intercepted by Cloudflare Access` 提示。
 
 ## 自托管Cap
 Cap支持自托管，你可以查看官方文档自行建立服务器[https://capjs.js.org/guide/server.html](https://capjs.js.org/guide/server.html)
@@ -132,6 +158,10 @@ Cap支持自托管，你可以查看官方文档自行建立服务器[https://ca
 本插件基于 Apache License Version 2.0 许可证发布。
 
 ## 更新日志
+
+### v1.1.0
+- 支持 Cloudflare Access Service Token：可在插件配置中填写 Client ID / Client Secret，服务端校验请求会自动附加认证请求头
+- 请求被 Cloudflare Access 拦截时给出明确提示，便于排查配置问题
 
 ### v1.0.0
 - 初始版本

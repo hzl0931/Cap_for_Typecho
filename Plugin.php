@@ -5,7 +5,7 @@
  *
  * @package Cap
  * @author CCRice
- * @version 1.0.0
+ * @version 1.1.0
  * @link https://github.com/prosopo/captcha
  */
 
@@ -49,7 +49,9 @@ class Cap_Plugin implements PluginInterface
             'scriptUrl' => 'https://captcha.gurl.eu.org/cap.min.js',
             'theme' => 'light',
             'enableActions' => array(),
-            'useCurl' => 'enable'
+            'useCurl' => 'enable',
+            'cfAccessClientId' => '',
+            'cfAccessClientSecret' => ''
         );
         
         // 使用 Typecho 的配置存储方法
@@ -159,11 +161,29 @@ class Cap_Plugin implements PluginInterface
             _t('(建议启用) 启用后将会使用 cURL 发送请求，但是需要 PHP 的 cURL 拓展。默认使用 file_get_contents 函数')
         );
 
+        $cfAccessClientId = new Text(
+            'cfAccessClientId',
+            NULL,
+            '',
+            _t('Cloudflare Access Client ID'),
+            _t('可选。当 Cap 服务受 Cloudflare Access Service Token 保护时填写，留空则不发送认证请求头')
+        );
+
+        $cfAccessClientSecret = new Text(
+            'cfAccessClientSecret',
+            NULL,
+            '',
+            _t('Cloudflare Access Client Secret'),
+            _t('可选。与 Client ID 配套使用。该值以明文保存在数据库中，请勿在不受信任的环境中使用')
+        );
+
         $form->addInput($apiEndpoint);
         $form->addInput($scriptUrl);
         $form->addInput($enableActions);
         $form->addInput($theme);
         $form->addInput($useCurl);
+        $form->addInput($cfAccessClientId);
+        $form->addInput($cfAccessClientSecret);
     }
 
     public static function header()
@@ -766,6 +786,17 @@ EOF;
         Options::alloc()->response->goBack();
     }
 
+    /**
+     * 清理请求头取值：剔除换行符并去除首尾空白
+     *
+     * 配置值常由复制粘贴得到，可能夹带换行或空格，直接拼进请求头会导致请求格式错误；
+     * 同时也可避免换行符造成的请求头注入。
+     */
+    private static function cleanHeaderValue($value)
+    {
+        return trim(str_replace(array("\r", "\n"), '', (string) $value));
+    }
+
     private static function validateCapToken($token)
     {
         try {
@@ -794,7 +825,25 @@ EOF;
             
             $response = null;
             $httpCode = 0;
-            
+
+            // 构造请求头；配置了 Cloudflare Access Service Token 时附加认证头
+            $headers = array(
+                'Content-Type: application/json',
+                'Accept: application/json',
+                'User-Agent: Cap-Typecho-Plugin/2.0'
+            );
+
+            $cfClientId = self::cleanHeaderValue(isset($config->cfAccessClientId) ? $config->cfAccessClientId : '');
+            $cfClientSecret = self::cleanHeaderValue(isset($config->cfAccessClientSecret) ? $config->cfAccessClientSecret : '');
+
+            if ($cfClientId !== '' && $cfClientSecret !== '') {
+                $headers[] = 'CF-Access-Client-Id: ' . $cfClientId;
+                $headers[] = 'CF-Access-Client-Secret: ' . $cfClientSecret;
+                error_log("🔐 CF Access Service Token: attached (client id: " . substr($cfClientId, 0, 8) . "...)");
+            } else {
+                error_log("🔐 CF Access Service Token: not configured, sending unauthenticated request");
+            }
+
             if ($config->useCurl == 'enable' && function_exists('curl_init')) {
                 $curl = curl_init();
                 curl_setopt_array($curl, [
@@ -802,11 +851,7 @@ EOF;
                     CURLOPT_RETURNTRANSFER => true,
                     CURLOPT_POST => true,
                     CURLOPT_POSTFIELDS => json_encode($payload),
-                    CURLOPT_HTTPHEADER => [
-                        'Content-Type: application/json',
-                        'Accept: application/json',
-                        'User-Agent: Cap-Typecho-Plugin/2.0'
-                    ],
+                    CURLOPT_HTTPHEADER => $headers,
                     CURLOPT_TIMEOUT => 15,
                     CURLOPT_CONNECTTIMEOUT => 10,
                     CURLOPT_SSL_VERIFYPEER => false,
@@ -832,11 +877,7 @@ EOF;
                 $context = stream_context_create([
                     'http' => [
                         'method' => 'POST',
-                        'header' => [
-                            'Content-Type: application/json',
-                            'Accept: application/json',
-                            'User-Agent: Cap-Typecho-Plugin/2.0'
-                        ],
+                        'header' => $headers,
                         'content' => json_encode($payload),
                         'timeout' => 15,
                         'ignore_errors' => true
@@ -864,7 +905,13 @@ EOF;
             error_log("HTTP Status: " . $httpCode);
             error_log("Response length: " . strlen($response));
             error_log("Response: " . $response);
-            
+
+            // Service Token 缺失或无效时，Cloudflare Access 会返回登录页（跟随重定向后状态码为 200）或直接返回 403
+            if (stripos($response, 'cloudflareaccess') !== false || stripos($response, 'Cloudflare Access') !== false) {
+                error_log("❌ Request was intercepted by Cloudflare Access - service token missing or invalid");
+                return array('success' => false, 'error' => 'Cloudflare Access 拒绝了请求，请检查 Service Token 配置');
+            }
+
             // 检查HTTP状态码
             if ($httpCode >= 400) {
                 error_log("❌ HTTP error: " . $httpCode);
@@ -887,7 +934,7 @@ EOF;
             // 清理响应内容
             $response = trim($response);
             $response = ltrim($response, "\xEF\xBB\xBF"); // 移除UTF-8 BOM
-            
+
             // 检查是否返回HTML错误页面
             if (stripos($response, '<html') !== false || stripos($response, '<!doctype') !== false) {
                 error_log("❌ Server returned HTML page");
@@ -984,6 +1031,8 @@ EOF;
                 return '验证服务配置错误，请联系管理员';
             } elseif (strpos($error, '服务器无响应') !== false) {
                 return '验证服务无响应，请稍后重试';
+            } elseif (strpos($error, 'Cloudflare Access') !== false) {
+                return '验证服务拒绝访问，请联系管理员检查 Service Token 配置';
             } else {
                 return '人机验证失败：' . $error . '，请重新验证';
             }
