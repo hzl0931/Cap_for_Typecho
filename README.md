@@ -5,7 +5,7 @@
 ---
 
 ![Static Badge](https://img.shields.io/badge/Apache_License-V2.0-green)
-![GitHub commit activity](https://img.shields.io/github/commit-activity/m/cc2562/Cap_for_Typecho)
+
 
 Cap 是一个现代、轻量级的开源 SHA-256 工作量证明 CAPTCHA 替代方案。
 
@@ -137,10 +137,6 @@ Cap支持自托管，你可以查看官方文档自行建立服务器[https://ca
 2. 将 `private static $rescueMode = false;` 改为 `private static $rescueMode = true;`
 3. 这将临时跳过登录验证，允许你进入后台调整设置
 
-### 启用插件时 500（旧版本遗留）
-
-
-
 ### 常见问题
 
 1. **验证码不显示**: 检查 API 端点和脚本地址是否正确
@@ -156,6 +152,7 @@ Cap支持自托管，你可以查看官方文档自行建立服务器[https://ca
 ## 鸣谢
 
 - Cap 项目: https://github.com/prosopo/captcha
+- 原 Cap for Typecho 插件项目：https://github.com/cc2562/Cap_for_Typecho
 
 ## 许可证
 
@@ -164,7 +161,7 @@ Cap支持自托管，你可以查看官方文档自行建立服务器[https://ca
 ## 更新日志
 
 ### v1.1.5
-- 修复启动插件报500的Bug：
+- 修复新版Typecho(自测时v1.3.0出现)启动插件报500的Bug：
   
   早期版本在 `activate()` 里直接用 PHP `serialize()` 写入默认配置，而 Typecho 以 JSON 存储插件配置，
   于是启用时 `Edit::configPlugin()` 的 `array_merge()` 会收到 `null` 并抛出 TypeError。现已移除这段写入，
