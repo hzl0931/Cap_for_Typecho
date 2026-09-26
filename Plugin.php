@@ -4,9 +4,9 @@
  * Cap 人机验证插件
  *
  * @package Cap
- * @author CCRice
- * @version 1.1.0
- * @link https://github.com/prosopo/captcha
+ * @author CCRice(Origin) ZL Hunter(fork)
+ * @version 1.1.5
+ * @link https://github.com/hzl0931/Cap_for_Typecho/
  */
 
 
@@ -42,38 +42,7 @@ class Cap_Plugin implements PluginInterface
      */
     public static function activate()
     {
-        // 初始化默认配置，避免配置未找到的错误
-        $options = Options::alloc();
-        $config = array(
-            'apiEndpoint' => 'https://captcha.gurl.eu.org/api',
-            'scriptUrl' => 'https://captcha.gurl.eu.org/cap.min.js',
-            'theme' => 'light',
-            'enableActions' => array(),
-            'useCurl' => 'enable',
-            'cfAccessClientId' => '',
-            'cfAccessClientSecret' => ''
-        );
-        
-        // 使用 Typecho 的配置存储方法
-        $db = \Typecho\Db::get();
-        $prefix = $db->getPrefix();
-        
-        // 检查配置是否已存在
-        try {
-            $existingConfig = $db->fetchRow($db->select()->from('table.options')->where('name = ?', 'plugin:Cap'));
-            if (!$existingConfig) {
-                // 配置不存在，插入默认配置
-                $db->query($db->insert('table.options')->rows(array(
-                    'name' => 'plugin:Cap',
-                    'user' => 0,
-                    'value' => serialize($config)
-                )));
-            }
-        } catch (Exception $e) {
-            // 如果出错，使用备用方法
-            $options->__set('plugin:Cap', $config);
-        }
-        
+        // 默认配置由 config() 的字段声明，Typecho 启用插件时会自动以 JSON 写入 plugin:Cap，此处不可自行写库
         \Typecho\Plugin::factory('Widget\Feedback')->comment = [__CLASS__, 'verifyCap_comment'];
         \Typecho\Plugin::factory('Widget\Archive')->header = [__CLASS__, 'header'];
         \Typecho\Plugin::factory('admin/footer.php')->end = [__CLASS__, 'output_login'];

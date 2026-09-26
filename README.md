@@ -137,6 +137,10 @@ Cap支持自托管，你可以查看官方文档自行建立服务器[https://ca
 2. 将 `private static $rescueMode = false;` 改为 `private static $rescueMode = true;`
 3. 这将临时跳过登录验证，允许你进入后台调整设置
 
+### 启用插件时 500（旧版本遗留）
+
+
+
 ### 常见问题
 
 1. **验证码不显示**: 检查 API 端点和脚本地址是否正确
@@ -158,6 +162,23 @@ Cap支持自托管，你可以查看官方文档自行建立服务器[https://ca
 本插件基于 Apache License Version 2.0 许可证发布。
 
 ## 更新日志
+
+### v1.1.5
+- 修复启动插件报500的Bug：
+  
+  早期版本在 `activate()` 里直接用 PHP `serialize()` 写入默认配置，而 Typecho 以 JSON 存储插件配置，
+  于是启用时 `Edit::configPlugin()` 的 `array_merge()` 会收到 `null` 并抛出 TypeError。现已移除这段写入，
+  默认配置改由 Typecho 依据 `config()` 的字段声明自动写入 JSON。
+
+  如果站点在旧版本下启用过本插件，数据库里可能残留一行序列化格式的配置。它的**读取**仍然兼容，
+  但**保存插件设置**时会再次触发同样的 500。恢复方法：
+
+  1. 后台「插件管理」中先**禁用** Cap，再重新**启用**
+  2. 或手动执行以下语句后重新启用：
+
+   ```sql
+   DELETE FROM typecho_options WHERE name IN ('plugin:Cap', '_plugin:Cap');
+   ```
 
 ### v1.1.0
 - 支持 Cloudflare Access Service Token：可在插件配置中填写 Client ID / Client Secret，服务端校验请求会自动附加认证请求头

@@ -39,9 +39,11 @@ All hooks are registered in `activate()`. Understanding the plugin means underst
 
 ### Configuration
 
-Config lives in Typecho's `table.options` under the key `plugin:Cap`, read everywhere via `Options::alloc()->plugin('Cap')`. Since the plugin defines no `Config` form class, `activate()` writes a default row directly into the DB and falls back to `Options::__set()` if the insert fails. Keys: `apiEndpoint`, `scriptUrl`, `theme`, `enableActions` (array, values `login` / `comment`), `useCurl`.
+Config lives in Typecho's `table.options` under the key `plugin:Cap`, read everywhere via `Options::alloc()->plugin('Cap')`. The fields are declared in `config(Form $form)`; Typecho calls that during activation, takes `Form::getValues()` (each element's constructor default) and writes the `plugin:Cap` row itself. Keys: `apiEndpoint`, `scriptUrl`, `theme`, `enableActions` (array, values `login` / `comment`), `useCurl`, `cfAccessClientId`, `cfAccessClientSecret`.
 
-Several handlers wrap config reads in `try/catch` and silently return on failure, so a missing or corrupt config degrades to "plugin does nothing" rather than a fatal error. Do not remove those guards without checking that `Options::plugin()` still tolerates an unconfigured plugin.
+**Never write `plugin:Cap` from `activate()`.** Typecho 1.3's `Edit::configPlugin()` merges settings with `json_decode()`, so any row stored in another format (PHP `serialize()`, for instance) makes it call `array_merge(null, $settings)` and 500 the activation. Reading is lax by comparison — `Widget\Options::plugin()` uses `tryDeserialize()`, which accepts both serialized and JSON — so a wrongly-formatted row stays readable and the bug only surfaces on the write path.
+
+Several handlers wrap config reads in `try/catch` and silently return on failure, so a missing or corrupt config degrades to "plugin does nothing" rather than a fatal error. Note that `Options::plugin()` *throws* `\Typecho\Plugin\Exception` when the `plugin:Cap` row is absent — those guards are exactly what keep an unconfigured plugin from fataling, so do not remove them.
 
 ### Token flow
 
